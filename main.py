@@ -46,20 +46,20 @@ def quantum_network(params, x):
     return qml.expval(qml.Hermitian(observable, wires=[0]))
 
 @jax.jit
-def mse(params, x, y):
+def abse(params, x, y):
     y_pred = quantum_network(params, x)
-    return (y - y_pred)**2
+    return jnp.abs(y - y_pred)
 
-mse_map = jax.vmap(mse, in_axes = (None, 0, 0))
+abse_map = jax.vmap(abse, in_axes = (None, 0, 0))
 
 @jax.jit
 def loss_fn(params, x, y):
-    return jnp.mean(mse_map(params,x,y))
+    return jnp.mean(abse_map(params,x,y))
 
 params_dev_shape = qml.StronglyEntanglingLayers.shape(n_layers=num_layers,n_wires=num_wires)
 
-learning_rate_schedule = optax.schedules.join_schedules(schedules = [optax.constant_schedule((1/10)**i) for i in range(6)],
-                                                                     boundaries = [10, 100, 250, 450, 700])
+learning_rate_schedule = optax.schedules.join_schedules(schedules = [optax.constant_schedule((1/2)**i) for i in range(6)],
+                                                                     boundaries = [25, 150, 250, 500, 700])
 
 opt = optax.adam(learning_rate = learning_rate_schedule)
 max_steps = 1000
@@ -79,8 +79,8 @@ def update_step_jit(i,args):
     loss_val, grads = jax.value_and_grad(loss_fn)(params, data, targets)
     #Prints the loss every 25 steps if print_training is enable
     def print_fn():
-        jax.debug.print("Step: {i}  Loss: {loss_val}", i=i, loss_val=jnp.sqrt(loss_val))
-    jax.lax.cond((jnp.mod(i, 50) == 0 ) & print_training, print_fn, lambda: None)
+        jax.debug.print("Step: {i}  Loss: {loss_val}", i=i, loss_val=loss_val)
+    jax.lax.cond((jnp.mod(i, 25) == 0 ) & print_training, print_fn, lambda: None)
     #Applies the param updates and updates the optimiser states
     updates, opt_state = opt.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
